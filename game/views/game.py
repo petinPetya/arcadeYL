@@ -1,4 +1,3 @@
-# views/game.py
 import arcade
 import random
 import math
