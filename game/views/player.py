@@ -25,15 +25,11 @@ class PlayerSelectView(arcade.View):
         
         self.buttons = []
         self.arrow_buttons = arcade.SpriteList()
-        
-        # Создаем список скинов
         self.skins = [
             PlayerSkin(name="Солдат", max_health=100, speed=3.0),
             PlayerSkin(name="Бандит", max_health=80, speed=5.0),
             PlayerSkin(name="Джангист", max_health=150, speed=6.0),
         ]
-        
-        # Загружаем текущий уровень скина из БД
         skin_level = self.user_data.get('skin_level', 1)
         for skin in self.skins:
             skin.level = skin_level
@@ -41,8 +37,7 @@ class PlayerSelectView(arcade.View):
         self.selected_skin_index = self.get_skin_index_from_db()
         self.init_ui()
     
-    def get_skin_index_from_db(self) -> int:
-        """Получаем индекс текущего скина из базы данных"""
+    def get_skin_index_from_db(self):
         current_skin = self.user_data.get('current_skin', 'Солдат')
         for i, skin in enumerate(self.skins):
             if skin.name == current_skin:
@@ -50,7 +45,6 @@ class PlayerSelectView(arcade.View):
         return 0
     
     def init_ui(self):
-        # Координаты для кнопок
         center_x = SCREEN_WIDTH // 2
         center_y = SCREEN_HEIGHT // 2
         button_y = 150
@@ -66,8 +60,6 @@ class PlayerSelectView(arcade.View):
     def create_arrow_buttons(self):
         center_x = SCREEN_WIDTH // 2
         center_y = SCREEN_HEIGHT // 2
-
-        # Кнопка "Назад"
         back_arrow = arcade.SpriteSolidColor(80, 80, arcade.color.TRANSPARENT_BLACK)
         back_arrow.center_x = 60
         back_arrow.center_y = SCREEN_HEIGHT - 60
@@ -75,8 +67,6 @@ class PlayerSelectView(arcade.View):
         back_arrow.height = 80
         back_arrow.action = self.go_back
         back_arrow.name = "back"
-
-        # Кнопка "Предыдущий скин"
         left_arrow = arcade.SpriteSolidColor(100, 100, arcade.color.TRANSPARENT_BLACK)
         left_arrow.center_x = center_x - 150
         left_arrow.center_y = center_y + 100
@@ -84,8 +74,6 @@ class PlayerSelectView(arcade.View):
         left_arrow.height = 100
         left_arrow.action = self.prev_skin
         left_arrow.name = "left"
-        
-        # Кнопка "Следующий скин"
         right_arrow = arcade.SpriteSolidColor(100, 100, arcade.color.TRANSPARENT_BLACK)
         right_arrow.center_x = center_x + 150
         right_arrow.center_y = center_y + 100
@@ -136,7 +124,17 @@ class PlayerSelectView(arcade.View):
             anchor_x="center",
             bold=True
         )
-
+        current_skin_name = self.user_data.get('current_skin', 'Бандит')
+        if skin.name == current_skin_name:
+            arcade.draw_text(
+                "ТЕКУЩИЙ СКИН",
+                panel_x,
+                panel_y + 150,
+                arcade.color.GREEN,
+                24,
+                anchor_x="center",
+                bold=True
+            )
         stats_y = panel_y + 40
         stats = [
             f"ЗДОРОВЬЕ: {skin.max_health}",
@@ -213,15 +211,15 @@ class PlayerSelectView(arcade.View):
     def create_arrow_points(self, center_x, center_y, direction, size=30):
         if direction == "left":
             return [
-                (center_x + size, center_y),
-                (center_x - size, center_y - size),
-                (center_x - size, center_y + size)
+                (center_x - size - 20,  center_y),
+                (center_x + size - 20, center_y - size),
+                (center_x + size - 20, center_y + size)
             ]
         elif direction == "right":
             return [
-                (center_x - size, center_y),
-                (center_x + size, center_y - size),
-                (center_x + size, center_y + size)
+                (center_x + size + 20 , center_y),
+                (center_x - size + 20, center_y - size),
+                (center_x - size + 20, center_y + size)
             ]
     
     def on_mouse_press(self, x, y, button, modifiers):

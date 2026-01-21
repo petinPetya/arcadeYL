@@ -55,7 +55,7 @@ class Player:
             self.skins = [
                 PlayerSkin(name="Солдат", max_health=100, speed=3.0),
                 PlayerSkin(name="Бандит", max_health=80, speed=5.0),
-                PlayerSkin(name="Джангист", max_health=150, speed=6.0),
+                PlayerSkin(name="Джангист", max_health=1500, speed=60.0),
             ]
     
     @property

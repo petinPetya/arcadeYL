@@ -1,24 +1,55 @@
+# views/game.py
 import arcade
 import random
 import math
 import os
-from data import Bullet, Enemy
+from data import Bullet, Enemy, PlayerSkin, Weapon
 from typing import List
 
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 SCREEN_TITLE = "2D Shooter Arena"
 
-PLAYER_SPEED = 5
 ENEMY_SPEED = 2
 BULLET_SPEED = 10
 ENEMY_SPAWN_RATE = 60
 
 
 class GameView(arcade.View):
-    def __init__(self, database):
+    def __init__(self, main_menu_view, user_id = 1):
         super().__init__()
-        self.database = database
+        self.main_menu_view = main_menu_view
+        self.user_id = user_id
+        self.db = main_menu_view.database
+        self.user_data = self.db.get_user_data(user_id) or {}
+        self.user_stats = self.db.get_user_stats_summary(user_id) or {}
+        skin_name = self.user_data.get('current_skin', 'Солдат')
+        skin_level = self.user_data.get('skin_level', 1)
+        if skin_name == "Солдат":
+            self.player_skin = PlayerSkin(name="Солдат", max_health=100, speed=3.0)
+        elif skin_name == "Бандит":
+            self.player_skin = PlayerSkin(name="Бандит", max_health=80, speed=5.0)
+        else:
+            self.player_skin = PlayerSkin(name="Джангист", max_health=150, speed=6.0)
+
+        self.player_skin.level = skin_level
+        
+        weapon_name = self.user_data.get('current_weapon', 'Пистолет')
+        weapon_level = self.user_data.get('weapon_level', 1)
+
+        if weapon_name == "Пистолет":
+            print("\nAAAAAA\n")
+            self.weapon = Weapon(name="Пистолет", damage=10, fire_rate=0.5)
+        elif weapon_name == "Дробовик":
+            self.weapon = Weapon(name="Дробовик", damage=30, fire_rate=1.2)
+        elif weapon_name == "Автомат":
+            self.weapon = Weapon(name="Автомат", damage=15, fire_rate=0.2)
+        elif weapon_name == "Снайперка":
+            self.weapon = Weapon(name="Снайперка", damage=50, fire_rate=1.5)
+        else:
+            self.weapon = Weapon(name="Пистолет", damage=10, fire_rate=0.5)
+
+        self.weapon.level = weapon_level
 
         self.tile_map = None
         self.scene = None
@@ -28,20 +59,28 @@ class GameView(arcade.View):
         self.background_list = None
         self.physics_engine = None
 
+        # Параметры игрока (основанные на скине)
+        self.player_health = self.player_skin.max_health
+        self.player_max_health = self.player_skin.max_health
+        self.player_speed = self.player_skin.speed
         self.player_x = SCREEN_WIDTH // 2
         self.player_y = SCREEN_HEIGHT // 2
         self.player_radius = 25
+        
         self.player_sprite = None
         self.bullets: List[Bullet] = []
         self.enemies: List[Enemy] = []
         self.enemy_spawn_timer = 0
         self.score = 0
+        self.total_kills = 0
         self.game_time = 0
         self.game_over = False
         self.keys_pressed = set()
         self.mouse_x = 0
         self.mouse_y = 0
         self.shoot_cooldown = 0
+        
+        self.load_sounds()
         self.load_tmx_map()
         self.setup_player()
     
@@ -155,54 +194,42 @@ class GameView(arcade.View):
                 self.wall_list
             )
     
-    def setup_ui(self):
-        pass
-    
     def on_show(self):
         arcade.set_background_color(arcade.color.DARK_GREEN)
-        print("Игра начата!")
+        print(f"Игра начата!")
+        print(f"Скин: {self.player_skin.name} (Уровень {self.player_skin.level})")
+        print(f"Оружие: {self.weapon.name} (Уровень {self.weapon.level})")
+        print(f"Здоровье: {self.player_health}/{self.player_max_health}")
+        print(f"Скорость: {self.player_speed}")
+        print(f"Урон оружия: {self.weapon.damage}")
     
     def on_draw(self):
         self.clear()
-        
-        # Рисуем фон
         arcade.draw_lbwh_rectangle_filled(
-            0, SCREEN_WIDTH, SCREEN_HEIGHT, 0,
+            0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
             arcade.color.DARK_GRAY
         )
-        
-        # Рисуем фон карты
+
         self.background_list.draw()
-        
-        # Рисуем декорации
         self.decoration_list.draw()
-        
-        # Рисуем врагов
         for enemy in self.enemies:
             enemy.draw()
-        
-        # Рисуем пули
         for bullet in self.bullets:
             bullet.draw()
-        
-        # Рисуем стены
         self.wall_list.draw()
-        
-        # Рисуем игрока (пока как круг)
         self.draw_player()
-        
-        # Рисуем интерфейс
         self.draw_ui()
-        
-        # Если игра окончена
         if self.game_over:
             self.draw_game_over()
     
     def draw_player(self):
-        """Отрисовка игрока"""
-        body_color = arcade.color.GOLD
-        
-        # Тело
+        if self.player_skin.name == "Солдат":
+            body_color = arcade.color.ARMY_GREEN
+        elif self.player_skin.name == "Бандит":
+            body_color = arcade.color.DARK_RED
+        else:
+            body_color = arcade.color.DARK_BLUE
+
         arcade.draw_circle_filled(
             self.player_x, self.player_y,
             self.player_radius, body_color
@@ -211,19 +238,13 @@ class GameView(arcade.View):
             self.player_x, self.player_y,
             self.player_radius, arcade.color.BLACK, 3
         )
-        
-        # Направление взгляда (к курсору)
         dx = self.mouse_x - self.player_x
         dy = self.mouse_y - self.player_y
         angle = math.atan2(dy, dx)
-        
-        # Глаза
         eye_x = self.player_x + math.cos(angle) * 15
         eye_y = self.player_y + math.sin(angle) * 15
         arcade.draw_circle_filled(eye_x, eye_y, 8, arcade.color.WHITE)
         arcade.draw_circle_filled(eye_x, eye_y, 4, arcade.color.BLACK)
-        
-        # Оружие
         weapon_length = 30
         weapon_end_x = self.player_x + math.cos(angle) * weapon_length
         weapon_end_y = self.player_y + math.sin(angle) * weapon_length
@@ -233,74 +254,135 @@ class GameView(arcade.View):
             weapon_end_x, weapon_end_y,
             arcade.color.BLACK, 4
         )
-
         health_width = 60
-        health_ratio = 1.0
+        health_ratio = self.player_health / self.player_max_health
         arcade.draw_lbwh_rectangle_filled(
-            self.player_x, self.player_y + self.player_radius + 25,
-            health_width, 8, arcade.color.DARK_GRAY
+            self.player_x - health_width/2, 
+            self.player_y + self.player_radius + 25,
+            health_width, 8, 
+            arcade.color.DARK_GRAY
         )
         arcade.draw_lbwh_rectangle_filled(
-            self.player_x - (health_width/2) + (health_width * health_ratio / 2),
+            self.player_x - health_width/2,
             self.player_y + self.player_radius + 25,
             health_width * health_ratio, 6,
-            arcade.color.GREEN
+            arcade.color.GREEN if health_ratio > 0.3 else arcade.color.RED
         )
     
     def draw_ui(self):
         arcade.draw_lbwh_rectangle_filled(
-            0, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_HEIGHT - 60,
+            0, 0, SCREEN_WIDTH, 80,
             arcade.color.DARK_SLATE_GRAY
         )
+        arcade.draw_text(
+            f"👤 {self.user_data.get('username', 'Игрок')}",
+            20, SCREEN_HEIGHT - 40,
+            arcade.color.WHITE, 22,
+            font_name="arial", bold=True
+        )
         
+        arcade.draw_text(
+            f"Уровень {self.player_skin.level}",
+            20, SCREEN_HEIGHT - 40,
+            arcade.color.RED, 18,
+            font_name="arial"
+        )
+
         stats = [
-            f"100/100",
+            f"{self.player_health}/{self.player_max_health}",
             f"Счёт: {self.score}",
             f"Время: {int(self.game_time)}с",
-            f"Врагов: {len(self.enemies)}"
+            f"Убито: {self.total_kills}",
+            f"{self.weapon.name}"
         ]
         
         for i, stat in enumerate(stats):
             arcade.draw_text(
                 stat,
-                20 + i * 300, SCREEN_HEIGHT - 35,
-                arcade.color.RED,
-                20,
+                SCREEN_WIDTH // 2 - 300 + i * 150, 
+                SCREEN_HEIGHT - 40,
+                arcade.color.RED, 20,
                 font_name="arial"
             )
 
+        # Для одарённых
         arcade.draw_text(
             "WASD - движение | ЛКМ - стрельба | ESC - выход",
             SCREEN_WIDTH // 2, 30,
             arcade.color.LIGHT_GRAY, 18,
-            anchor_x="center"
+            anchor_x="center", font_name="arial"
         )
     
+    def load_sounds(self):
+        try:
+            shot_sound_path = "../assets/sounds/shot.mp3"
+            if os.path.exists(shot_sound_path):
+                self.shot_sound = arcade.load_sound(shot_sound_path)
+                print(f"Звук выстрела загружен: {shot_sound_path}")
+            else:
+                print(f"Файл звука выстрела не найден: {shot_sound_path}")
+                self.shot_sound = None
+
+        except Exception as e:
+            print(f"Ошибка загрузки звуков: {e}")
+            self.sounds_loaded = False
+    
+    def play_sound(self, sound, volume=1.0, pan=0.0):
+        try:
+            sound.play(volume=volume, pan=pan)
+        except Exception as e:
+            print(f"Ошибка воспроизведения: {e}")
+    
+    def play_shot_sound(self):
+        if self.shot_sound:
+            if self.weapon.name == "Пистолет":
+                volume = 0.7
+            elif self.weapon.name == "Дробовик":
+                volume = 1.0
+            elif self.weapon.name == "Автомат":
+                volume = 0.6
+            else:
+                volume = 0.8
+            self.play_sound(self.shot_sound, volume=volume)
+
     def draw_game_over(self):
         arcade.draw_lbwh_rectangle_filled(
-            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2,
-            SCREEN_WIDTH, SCREEN_HEIGHT,
-            (0, 0, 0, 180)
+            SCREEN_WIDTH // 2 - 320, SCREEN_HEIGHT // 2 - 150,
+            640, 300,
+            arcade.color.DARK_SLATE_GRAY
+        )
+        
+        arcade.draw_lbwh_rectangle_outline(
+            SCREEN_WIDTH // 2 - 320, SCREEN_HEIGHT // 2 - 150,
+            640, 300,
+            arcade.color.GOLD, 4
         )
         
         arcade.draw_text(
-            "ИГРА ОКОНЧЕНА",
-            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100,
-            arcade.color.RED, 64,
+            "Game Over((",  # простите, шрифта не нашлось
+            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 90,
+            arcade.color.RED, 48,
             anchor_x="center", bold=True
         )
         
         arcade.draw_text(
             f"Ваш счёт: {self.score}",
-            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2,
-            arcade.color.WHITE, 36,
+            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30,
+            arcade.color.WHITE, 32,
+            anchor_x="center"
+        )
+        
+        arcade.draw_text(
+            f"Убито врагов: {self.total_kills}",
+            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
+            arcade.color.WHITE, 24,
             anchor_x="center"
         )
         
         arcade.draw_text(
             "Нажмите ESC для выхода в меню",
-            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100,
-            arcade.color.YELLOW, 24,
+            SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80,
+            arcade.color.YELLOW, 20,
             anchor_x="center"
         )
     
@@ -309,76 +391,51 @@ class GameView(arcade.View):
             return
         
         self.game_time += delta_time
-        
-        # КД стрельбы
         if self.shoot_cooldown > 0:
             self.shoot_cooldown -= 1
-        
-        # Движение игрока
         self.handle_player_movement()
-        
-        # Обновление физики (коллизии со стенами)
         if self.physics_engine:
             self.physics_engine.update()
-            # Обновляем позицию из спрайта
             self.player_x = self.player_sprite.center_x
             self.player_y = self.player_sprite.center_y
-        
-        # Обновление пуль
         self.update_bullets()
-        
-        # Обновление врагов
         self.update_enemies()
-        
-        # Спавн врагов
         self.spawn_enemies()
-        
-        # Проверка столкновений
         self.check_collisions()
+        if self.player_health <= 0:
+            self.end_game()
     
     def handle_player_movement(self):
         dx, dy = 0, 0
-        
         if arcade.key.W in self.keys_pressed:
-            dy += PLAYER_SPEED
+            dy += self.player_speed
         if arcade.key.S in self.keys_pressed:
-            dy -= PLAYER_SPEED
+            dy -= self.player_speed
         if arcade.key.A in self.keys_pressed:
-            dx -= PLAYER_SPEED
+            dx -= self.player_speed
         if arcade.key.D in self.keys_pressed:
-            dx += PLAYER_SPEED
+            dx += self.player_speed
 
         if dx != 0 and dy != 0:
             dx *= 0.7071
             dy *= 0.7071
-        
-        # Обновляем скорость спрайта игрока
         if self.player_sprite:
             self.player_sprite.change_x = dx
             self.player_sprite.change_y = dy
-        
-        # Обновляем позицию (если нет физического движка)
         if not self.physics_engine:
             self.player_x += dx
             self.player_y += dy
-            
-            # Ограничение в пределах экрана
             self.player_x = max(self.player_radius, min(SCREEN_WIDTH - self.player_radius, self.player_x))
             self.player_y = max(self.player_radius, min(SCREEN_HEIGHT - self.player_radius, self.player_y))
     
     def update_bullets(self):
-        """Обновление пуль"""
         bullets_to_remove = []
         
         for i, bullet in enumerate(self.bullets):
             bullet.update()
-            
-            # Удаляем пули за пределами экрана
             if (bullet.x < 0 or bullet.x > SCREEN_WIDTH or 
                 bullet.y < 0 or bullet.y > SCREEN_HEIGHT):
                 bullets_to_remove.append(i)
-            
-            # Проверка коллизий пуль со стенами
             if self.wall_list:
                 for wall in self.wall_list:
                     distance = math.sqrt(
@@ -388,18 +445,13 @@ class GameView(arcade.View):
                     if distance < bullet.radius + wall.width / 2:
                         bullets_to_remove.append(i)
                         break
-        
-        # Удаляем отмеченные пули
         for i in reversed(bullets_to_remove):
             if i < len(self.bullets):
                 self.bullets.pop(i)
     
     def update_enemies(self):
-        """Обновление врагов"""
         for enemy in self.enemies:
             enemy.update(self.player_x, self.player_y)
-            
-            # Проверка коллизий врагов со стенами
             if self.wall_list:
                 for wall in self.wall_list:
                     distance = math.sqrt(
@@ -407,7 +459,6 @@ class GameView(arcade.View):
                         (enemy.y - wall.center_y)**2
                     )
                     if distance < enemy.radius + wall.width / 2:
-                        # Отталкивание от стены
                         dx = enemy.x - wall.center_x
                         dy = enemy.y - wall.center_y
                         dist = max(0.1, distance)
@@ -415,16 +466,10 @@ class GameView(arcade.View):
                         enemy.y += (dy / dist) * 5
     
     def spawn_enemies(self):
-        """Спавн новых врагов из точек спавна"""
         self.enemy_spawn_timer += 1
-        
         if self.enemy_spawn_timer >= ENEMY_SPAWN_RATE and self.spawn_list:
             self.enemy_spawn_timer = 0
-            
-            # Выбираем случайную точку спавна
             spawn_point = random.choice(self.spawn_list)
-            
-            # Создаем врага
             enemy = Enemy(
                 x=spawn_point.center_x,
                 y=spawn_point.center_y,
@@ -437,11 +482,8 @@ class GameView(arcade.View):
             self.enemies.append(enemy)
     
     def check_collisions(self):
-        """Проверка столкновений"""
         bullets_to_remove = []
         enemies_to_remove = []
-        
-        # Пули с врагами
         for i, bullet in enumerate(self.bullets):
             for j, enemy in enumerate(self.enemies):
                 distance = math.sqrt(
@@ -449,35 +491,29 @@ class GameView(arcade.View):
                 )
                 
                 if distance < bullet.radius + enemy.radius:
-                    # Попадание!
-                    enemy.health -= 10  # Заглушка урона
+                    enemy.health -= self.weapon.damage
                     bullets_to_remove.append(i)
                     
                     if enemy.health <= 0:
                         enemies_to_remove.append(j)
                         self.score += 10
-                    
+                        self.total_kills += 1
                     break
-        
-        # Удаляем пораженных врагов и использованные пули
+
         for i in reversed(enemies_to_remove):
             self.enemies.pop(i)
         
         for i in reversed(bullets_to_remove):
             if i < len(self.bullets):
                 self.bullets.pop(i)
-        
-        # Враги с игроком
+
         for enemy in self.enemies:
             distance = math.sqrt(
                 (self.player_x - enemy.x)**2 + (self.player_y - enemy.y)**2
             )
             
             if distance < self.player_radius + enemy.radius:
-                # Урон игроку
-                # self.player_health -= 1  # Раскомментировать когда будет здоровье
-                
-                # Отталкивание врага
+                self.player_health -= 5
                 dx = enemy.x - self.player_x
                 dy = enemy.y - self.player_y
                 dist = max(0.1, distance)
@@ -485,43 +521,62 @@ class GameView(arcade.View):
                 enemy.y += (dy / dist) * 20
     
     def shoot(self):
-        """Выстрел"""
         if self.shoot_cooldown > 0:
             return
-        
-        # КД стрельбы
-        self.shoot_cooldown = 10  # Заглушка
-        
-        # Направление к курсору
+
+        self.shoot_cooldown = int(self.weapon.fire_rate * 60)
         dx = self.mouse_x - self.player_x
         dy = self.mouse_y - self.player_y
         dist = max(0.1, math.sqrt(dx*dx + dy*dy))
-        
-        # Создаем пулю
         bullet = Bullet(
             x=self.player_x,
             y=self.player_y,
             dx=(dx / dist) * BULLET_SPEED,
             dy=(dy / dist) * BULLET_SPEED,
-            damage=10  # Заглушка урона
+            damage=self.weapon.damage
         )
-        
+        self.play_shot_sound()
         self.bullets.append(bullet)
+    
+    def end_game(self):
+        self.game_over = True
+        money_earned = self.score // 10
+        money_earned = max(10, money_earned)
+        current_money = self.user_stats.get('money', 1000)
+        new_money = current_money + money_earned
+        self.db.update_user_settings(
+            self.user_id,
+            money=new_money
+        )
+        self.db.cursor.execute('''
+            INSERT INTO game_records (user_id, score, kills, play_time)
+            VALUES (?, ?, ?, ?)
+        ''', (self.user_id, self.score, self.total_kills, int(self.game_time)))
+        self.db.conn.commit()
+        
+        print(f"Игра завершена!")
+        print(f"Счёт: {self.score}")
+        print(f"Убито врагов: {self.total_kills}")
+        print(f"Заработано денег: {money_earned}")
+        print(f"Общее время: {int(self.game_time)} секунд")
     
     def on_key_press(self, key, modifiers):
         self.keys_pressed.add(key)
         
-        # if key == arcade.key.ESCAPE:
-        #     # Возвращаемся в меню
-        #     from main_menu_view import MainMenuView
-        #     menu_view = MainMenuView(self.database)
-        #     self.window.show_view(menu_view)
-        
-        # Тестовые клавиши
+        if key == arcade.key.ESCAPE:
+            if self.game_over:
+                self.window.show_view(self.main_menu_view)
+            else:
+                print("Нажмите ESC еще раз для выхода в меню")
+
         if key == arcade.key.SPACE:
             self.spawn_enemies()
         if key == arcade.key.P:
             self.score += 100
+        if key == arcade.key.H:
+            self.player_health = min(self.player_max_health, self.player_health + 50)
+        if key == arcade.key.G:
+            self.end_game()
     
     def on_key_release(self, key, modifiers):
         if key in self.keys_pressed:

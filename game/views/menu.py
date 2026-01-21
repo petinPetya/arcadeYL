@@ -1,14 +1,16 @@
 import arcade
-from dataclasses import dataclass
 
 from database import Database
-from views import weapon, player, game, profile  # views.py, привет джанга!
+from views.weapon import WeaponSelectView
+from views.player import PlayerSelectView
+from views.game import GameView
+from views.profile import ProfileView
 
+from data import PlayerSkin
 
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 SCREEN_TITLE = "2D Shooter Arena"
-
 
 MENU_BACKGROUND = arcade.color.DARK_SLATE_GRAY
 PANEL_COLOR = arcade.color.DARK_BLUE_GRAY
@@ -20,7 +22,7 @@ class MainMenuView(arcade.View):
     def __init__(self, database):
         super().__init__()
         self.database = database
-        self.current_user = None
+        self.current_user = 1
         self.buttons = []
         self.init_ui()
 
@@ -44,24 +46,24 @@ class MainMenuView(arcade.View):
                 center_y + 60,
                 button_width,
                 button_height,
-                "БОЙЦЫ",
-                self.switch_to_player,
+                "ПРОФИЛЬ",
+                self.show_profile,
             ),
             (
                 center_x,
                 center_y,
                 button_width,
                 button_height,
-                "АРСЕНАЛ",
-                self.switch_to_weapon,
+                "БОЙЦЫ",
+                self.switch_to_player,
             ),
             (
                 center_x,
                 center_y - 60,
                 button_width,
                 button_height,
-                "РЕКОРДЫ",
-                self.show_scores,
+                "АРСЕНАЛ",
+                self.switch_to_weapon,
             ),
             (
                 center_x,
@@ -76,6 +78,7 @@ class MainMenuView(arcade.View):
     def on_draw(self):
         self.clear()
         arcade.set_background_color(MENU_BACKGROUND)
+        
         arcade.draw_text(
             "2D SHOOTER ARENA",
             SCREEN_WIDTH // 2,
@@ -114,31 +117,41 @@ class MainMenuView(arcade.View):
             self.start_game()
         elif key == arcade.key.ESCAPE:
             self.exit_game()
-        elif key == arcade.key.RIGHT:
-            self.next_weapon()
-        elif key == arcade.key.LEFT:
-            self.next_skin()
+        elif key == arcade.key.P:
+            self.switch_to_player()
+        elif key == arcade.key.W:
+            self.switch_to_weapon()
+        elif key == arcade.key.P:
+            self.show_profile()
 
     def start_game(self):
-        game_view = game.GameView(
-            self.skins[self.current_skin_index],
-            weapon.WeaponSelectView.weapons[0],
-            self.database,
-        )
+        user_data = self.database.get_user_data(self.current_user) or {}
+        current_skin = user_data.get('current_skin', 'Солдат')
+
+        if current_skin == "Солдат":
+            skin = PlayerSkin(name="Солдат", max_health=100, speed=3.0)
+        elif current_skin == "Бандит":
+            skin = PlayerSkin(name="Бандит", max_health=80, speed=5.0)
+        else:
+            skin = PlayerSkin(name="Джангист", max_health=1500, speed=6.0)
+
+        from data import Weapon
+        weapon = Weapon("Пистолет", damage=10, fire_rate=0.5)
+
+        game_view = GameView(self, self.current_user)
         self.window.show_view(game_view)
 
-    def show_scores(self):
-        pr_view = profile.ProfileView(
-            
-        )
+    def show_profile(self):
+        profile_view = ProfileView(self)
+        self.window.show_view(profile_view)
 
     def switch_to_weapon(self):
-        weapon_view = weapon.WeaponSelectView(self)
+        weapon_view = WeaponSelectView(self)
         self.window.show_view(weapon_view)
 
     def switch_to_player(self):
-        weapon_view = player.PlayerSelectView(self)
-        self.window.show_view(weapon_view)
+        player_view = PlayerSelectView(self, self.current_user)
+        self.window.show_view(player_view)
 
     def exit_game(self):
         arcade.close_window()
@@ -146,7 +159,6 @@ class MainMenuView(arcade.View):
 
 def main():
     window = arcade.Window(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-    ## arcade.open_window(SCREEN_WIDTH - 200, SCREEN_HEIGHT - 500, SCREEN_TITLE)
     db = Database()
     db.create_user("Player1")
 
@@ -155,3 +167,7 @@ def main():
 
     arcade.run()
     db.close()
+
+
+if __name__ == "__main__":
+    main()

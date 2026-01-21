@@ -7,40 +7,34 @@ class Database:
     def __init__(self, db_name="game_data.db"):
         self.conn = sqlite3.connect(db_name)
         self.create_tables()
+        self.cursor = self.conn.cursor()
     
     def create_tables(self):
         cursor = self.conn.cursor()
-        
-        # Таблица пользователей с расширенными полями
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                
-                -- Статистика игры
+
                 high_score INTEGER DEFAULT 0,
                 total_kills INTEGER DEFAULT 0,
                 total_play_time INTEGER DEFAULT 0,
                 games_played INTEGER DEFAULT 0,
-                
-                -- Настройки игрока
+
                 current_skin TEXT DEFAULT 'Солдат',
                 skin_level INTEGER DEFAULT 1,
                 skin_upgrade_cost INTEGER DEFAULT 150,
-                
-                -- Настройки оружия
+
                 current_weapon TEXT DEFAULT 'Пистолет',
                 weapon_level INTEGER DEFAULT 1,
                 weapon_upgrade_cost INTEGER DEFAULT 100,
-                
-                -- Ресурсы игрока
+
                 money INTEGER DEFAULT 1000,
                 last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # Таблица рекордов (топ 10 для каждого режима, если нужно)
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS game_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,8 +49,7 @@ class Database:
         
         self.conn.commit()
     
-    def create_user(self, username: str) -> Optional[int]:
-        """Создание нового пользователя"""
+    def create_user(self, username):
         cursor = self.conn.cursor()
         try:
             cursor.execute(
@@ -68,7 +61,7 @@ class Database:
         except sqlite3.IntegrityError:
             return None
     
-    def get_user_data(self, user_id: int) -> Optional[Dict]:
+    def get_user_data(self, user_id: int):
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT 
@@ -131,7 +124,7 @@ class Database:
             cursor.execute(query, values)
             self.conn.commit()
     
-    def get_top_players(self, limit: int = 10) -> List[Dict]:
+    def get_top_players(self, limit: int = 10):
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT 
@@ -150,7 +143,7 @@ class Database:
         
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
     
-    def get_user_recent_records(self, user_id: int, limit: int = 3) -> List[Dict]:
+    def get_user_recent_records(self, user_id: int, limit: int = 3):
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT score, kills, play_time, achieved_at
@@ -164,7 +157,7 @@ class Database:
         
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
     
-    def get_user_weapon_info(self, user_id: int) -> Dict:
+    def get_user_weapon_info(self, user_id: int):
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT current_weapon, weapon_level, weapon_upgrade_cost
@@ -208,8 +201,7 @@ class Database:
             'skin_upgrade_cost': row[2]
         }
     
-    def get_user_stats_summary(self, user_id: int) -> Dict:
-        """Получение сводки статистики пользователя"""
+    def get_user_stats_summary(self, user_id: int):
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT 
